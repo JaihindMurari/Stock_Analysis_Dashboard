@@ -8,6 +8,9 @@ A production-ready Flask web application that fetches, stores, analyzes, and vis
 <br>
 <img width="1899" height="866" alt="Screenshot 2026-05-02 105914" src="https://github.com/user-attachments/assets/d0493d34-1977-4330-b31c-c017f85a7ffa" />
 <br>
+<h1>Charts<h1>
+  <img width="1911" height="760" alt="Screenshot 2026-05-02 125236" src="https://github.com/user-attachments/assets/f6fe4b8d-55d7-411b-991d-492200018ccf" />
+<br>
 <h1>Signals</h1>
 <img width="1897" height="843" alt="Screenshot 2026-05-02 113613" src="https://github.com/user-attachments/assets/c885dc6f-ed5f-4879-8d42-a30989ea10e8" />
 <br>
