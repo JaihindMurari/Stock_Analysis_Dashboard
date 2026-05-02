@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+
+{% block content %}
+<div class="page-header flex-between">
+  <div>
+    <h1 class="page-title">Market Overview</h1>
+    <p class="page-subtitle">Top 50 NSE/BSE equities — live tracking</p>
+  </div>
+  <div class="flex gap-2">
+    <button class="filter-btn" id="seedBtn">
+      <i class="bi bi-database-fill-add"></i> Seed Data
+    </button>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="stats-grid" id="kpiRow">
+  <div class="stat-card"><div class="stat-label">Total Stocks</div><div class="stat-value blue" id="kpiTotal">—</div></div>
+  <div class="stat-card"><div class="stat-label">Buy Signals</div><div class="stat-value green" id="kpiBuy">—</div></div>
+  <div class="stat-card"><div class="stat-label">Sell Signals</div><div class="stat-value red" id="kpiSell">—</div></div>
+  <div class="stat-card"><div class="stat-label">Hold Signals</div><div class="stat-value blue" id="kpiHold">—</div></div>
+  <div class="stat-card"><div class="stat-label">Price Records</div><div class="stat-value" id="kpiPrices">—</div></div>
+</div>
+
+<!-- Top Movers + Sector Breakdown -->
+<div class="movers-grid mb-6">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="bi bi-arrow-up-circle-fill" style="color:var(--accent-green)"></i> Top Gainers</span>
+    </div>
+    <div class="card-body" id="gainersBody">
+      <div class="loader-overlay"><div class="spinner"></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="bi bi-arrow-down-circle-fill" style="color:var(--accent-red)"></i> Top Losers</span>
+    </div>
+    <div class="card-body" id="losersBody">
+      <div class="loader-overlay"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Stock Table -->
+<div class="card mb-6">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-table"></i> All Stocks</span>
+    <div class="flex gap-2" style="align-items:center">
+      <input type="text" class="search-input" id="tableSearch" placeholder="Filter stocks…" style="min-width:160px" />
+      <div id="signalFilterBtns" class="flex gap-2">
+        <button class="filter-btn active" data-sig="ALL">All</button>
+        <button class="filter-btn" data-sig="BUY">Buy</button>
+        <button class="filter-btn" data-sig="SELL">Sell</button>
+        <button class="filter-btn" data-sig="HOLD">Hold</button>
+      </div>
+    </div>
+  </div>
+  <div class="table-wrapper">
+    <table class="stock-table" id="stockTable">
+      <thead>
+        <tr>
+          <th data-col="symbol">Symbol <i class="bi bi-arrow-down-up"></i></th>
+          <th data-col="name">Company</th>
+          <th data-col="sector">Sector</th>
+          <th data-col="close">Price</th>
+          <th data-col="change">Change</th>
+          <th data-col="change_pct">% Change</th>
+          <th data-col="volume">Volume</th>
+          <th data-col="signal">Signal</th>
+          <th data-col="confidence">Confidence</th>
+          <th>Last Updated</th>
+        </tr>
+      </thead>
+      <tbody id="stockTableBody">
+        <tr><td colspan="10" style="text-align:center;padding:40px">
+          <div class="spinner" style="margin:auto"></div>
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+'use strict';
+
+let allStocks = [];
+let sortCol   = 'symbol';
+let sortAsc   = true;
+let sigFilter = 'ALL';
+
+function renderMoverItem(s, isGainer) {
+  const pct = s.change_pct ?? 0;
+  return `
+    <div class="mover-item" onclick="location.href='/stock/${s.symbol}'">
+      <div class="mover-left">
+        <span class="mover-symbol">${s.symbol.replace('.NS','').replace('.BO','')}</span>
+        <span class="mover-name">${s.name}</span>
+      </div>
+      <div class="mover-right">
+        <div class="mover-price">${fmtPrice(s.close)}</div>
+        <div class="mover-pct ${isGainer ? 'pos' : 'neg'}">${fmtPct(pct)}</div>
+      </div>
+    </div>`;
+}
+
+async function loadMovers() {
+  try {
+    const data = await API.get('/top-movers');
+    document.getElementById('gainersBody').innerHTML =
+      data.gainers.map(s => renderMoverItem(s, true)).join('') || '<div class="empty-state"><p>No data yet</p></div>';
+    document.getElementById('losersBody').innerHTML =
+      data.losers.map(s => renderMoverItem(s, false)).join('') || '<div class="empty-state"><p>No data yet</p></div>';
+  } catch(e) {
+    ['gainersBody','losersBody'].forEach(id => {
+      document.getElementById(id).innerHTML = '<div class="empty-state"><i class="bi bi-exclamation-triangle"></i><p>Failed to load</p></div>';
+    });
+  }
+}
+
+async function loadSummary() {
+  try {
+    const d = await API.get('/market-summary');
+    document.getElementById('kpiTotal').textContent  = d.total_stocks   ?? '—';
+    document.getElementById('kpiBuy').textContent    = d.buy_signals    ?? '—';
+    document.getElementById('kpiSell').textContent   = d.sell_signals   ?? '—';
+    document.getElementById('kpiHold').textContent   = d.hold_signals   ?? '—';
+    document.getElementById('kpiPrices').textContent = (d.total_price_records ?? 0).toLocaleString('en-IN');
+  } catch(e) {}
+}
+
+function signalBadge(sig) {
+  if (!sig) return '<span class="text-muted">—</span>';
+  const cls = sig.toLowerCase();
+  return `<span class="badge badge-${cls}">${sig}</span>`;
+}
+
+function renderTable(stocks) {
+  const q = document.getElementById('tableSearch').value.trim().toLowerCase();
+  let filtered = stocks;
+  if (q) filtered = filtered.filter(s => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
+  if (sigFilter !== 'ALL') filtered = filtered.filter(s => s.signal === sigFilter);
+
+  // Sort
+  filtered.sort((a, b) => {
+    let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ?  1 : -1;
+    return 0;
+  });
+
+  const tbody = document.getElementById('stockTableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><i class="bi bi-search"></i><p>No stocks match your filter</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(s => {
+    const sym = s.symbol.replace('.NS','').replace('.BO','');
+    const pos = s.change_pct >= 0;
+    return `
+    <tr onclick="location.href='/stock/${s.symbol}'">
+      <td class="td-symbol">${sym}</td>
+      <td class="td-name">${s.name}</td>
+      <td style="text-align:left;color:var(--text-muted);font-size:11.5px">${s.sector ?? '—'}</td>
+      <td class="td-price">${fmtPrice(s.close)}</td>
+      <td class="td-change ${pos?'pos':'neg'}">${s.change != null ? (pos?'+':'')+s.change.toFixed(2) : '—'}</td>
+      <td class="td-change ${pos?'pos':'neg'}">${fmtPct(s.change_pct)}</td>
+      <td class="td-volume">${fmtVol(s.volume)}</td>
+      <td>${signalBadge(s.signal)}</td>
+      <td style="font-family:var(--font-mono);font-size:11.5px">${s.confidence ? s.confidence.toFixed(0)+'%' : '—'}</td>
+      <td style="font-size:11.5px;color:var(--text-muted)">${fmtDate(s.last_updated)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadStocks() {
+  try {
+    allStocks = await API.get('/stocks');
+    renderTable(allStocks);
+  } catch(e) {
+    document.getElementById('stockTableBody').innerHTML = `
+      <tr><td colspan="10"><div class="empty-state">
+        <i class="bi bi-database-x"></i>
+        <p>No data available — click <strong>Seed Data</strong> then <strong>Refresh</strong> to load stocks</p>
+      </div></td></tr>`;
+  }
+}
+
+// Sorting
+document.querySelectorAll('#stockTable thead th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = true; }
+    document.querySelectorAll('#stockTable thead th').forEach(h => h.classList.remove('sorted'));
+    th.classList.add('sorted');
+    renderTable(allStocks);
+  });
+});
+
+// Signal filter
+document.querySelectorAll('#signalFilterBtns .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#signalFilterBtns .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    sigFilter = btn.dataset.sig;
+    renderTable(allStocks);
+  });
+});
+
+document.getElementById('tableSearch').addEventListener('input', () => renderTable(allStocks));
+
+// Seed button
+document.getElementById('seedBtn').addEventListener('click', async () => {
+  try {
+    await API.post('/admin/seed');
+    showToast('Stock universe seeded! Now click Refresh to fetch data.', 'success', 5000);
+    await loadStocks();
+  } catch(e) {
+    showToast('Seed failed: ' + e.message, 'error');
+  }
+});
+
+// Polling every 5 min
+async function pollAll() {
+  await Promise.all([loadSummary(), loadMovers(), loadStocks()]);
+}
+pollAll();
+setInterval(pollAll, 5 * 60 * 1000);
+</script>
+{% endblock %}

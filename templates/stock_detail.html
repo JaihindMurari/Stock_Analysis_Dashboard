@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ symbol }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.detail-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+.detail-title { font-family:var(--font-display); font-size:28px; font-weight:800; }
+.detail-sub   { font-size:13px; color:var(--text-muted); margin-top:4px; }
+.price-block  { text-align:right; }
+.live-price   { font-family:var(--font-mono); font-size:32px; font-weight:700; }
+.live-change  { font-size:15px; font-weight:600; margin-top:2px; }
+.period-btns  { display:flex; gap:6px; margin-bottom:12px; }
+.period-btn   { padding:4px 12px; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-secondary); font-size:12px; cursor:pointer; transition:all .15s; }
+.period-btn.active { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
+.ind-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:12px; margin-bottom:20px; }
+.ind-item { background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+.ind-label { font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+.ind-value { font-family:var(--font-mono); font-size:16px; font-weight:700; color:var(--text-primary); }
+.sig-box { padding:18px 20px; border-radius:var(--radius); margin-bottom:20px; border:1px solid var(--border); }
+.sig-box.buy  { background:var(--buy-bg);  border-color:var(--accent-green); }
+.sig-box.sell { background:var(--sell-bg); border-color:var(--accent-red); }
+.sig-box.hold { background:var(--hold-bg); border-color:var(--accent-blue); }
+.sig-title { font-family:var(--font-display); font-size:18px; font-weight:800; }
+.sig-title.buy  { color:var(--accent-green); }
+.sig-title.sell { color:var(--accent-red); }
+.sig-title.hold { color:var(--accent-blue); }
+.sig-reason { font-size:13px; color:var(--text-secondary); margin-top:8px; line-height:1.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Back -->
+<a href="{{ url_for('main.dashboard') }}" style="color:var(--text-muted);font-size:13px;display:inline-flex;align-items:center;gap:6px;margin-bottom:18px">
+  <i class="bi bi-arrow-left"></i> Back to Overview
+</a>
+
+<!-- Header -->
+<div class="detail-header">
+  <div>
+    <h1 class="detail-title" id="stockTitle">{{ symbol }}</h1>
+    <p class="detail-sub" id="stockMeta">Loading…</p>
+  </div>
+  <div class="price-block">
+    <div class="live-price" id="livePrice">—</div>
+    <div class="live-change" id="liveChange">—</div>
+  </div>
+</div>
+
+<!-- Signal Box -->
+<div id="signalBox" class="sig-box hold">
+  <div class="flex-between">
+    <div>
+      <div class="sig-title hold" id="sigTitle">Loading signal…</div>
+      <div class="sig-reason" id="sigReason">Calculating technical indicators…</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:11px;color:var(--text-muted)">Confidence</div>
+      <div id="sigConf" style="font-family:var(--font-mono);font-size:22px;font-weight:700">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- Indicator Summary Row -->
+<div class="ind-grid mb-4" id="indGrid">
+  <div class="ind-item"><div class="ind-label">RSI (14)</div><div class="ind-value" id="ind-rsi">—</div></div>
+  <div class="ind-item"><div class="ind-label">MACD</div><div class="ind-value" id="ind-macd">—</div></div>
+  <div class="ind-item"><div class="ind-label">SMA 20</div><div class="ind-value" id="ind-sma20">—</div></div>
+  <div class="ind-item"><div class="ind-label">SMA 50</div><div class="ind-value" id="ind-sma50">—</div></div>
+  <div class="ind-item"><div class="ind-label">EMA 12</div><div class="ind-value" id="ind-ema12">—</div></div>
+  <div class="ind-item"><div class="ind-label">BB Upper</div><div class="ind-value" id="ind-bbu">—</div></div>
+  <div class="ind-item"><div class="ind-label">BB Lower</div><div class="ind-value" id="ind-bbl">—</div></div>
+  <div class="ind-item"><div class="ind-label">Volume</div><div class="ind-value" id="ind-vol">—</div></div>
+</div>
+
+<!-- Period Selector -->
+<div class="period-btns" id="periodBtns">
+  <button class="period-btn" data-days="30">1M</button>
+  <button class="period-btn active" data-days="90">3M</button>
+  <button class="period-btn" data-days="180">6M</button>
+  <button class="period-btn" data-days="365">1Y</button>
+</div>
+
+<!-- Main Candlestick Chart -->
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="card-title">Price & Volume — OHLCV</span>
+  </div>
+  <div class="card-body relative" style="padding:10px">
+    <div id="candleChart" style="height:420px"></div>
+  </div>
+</div>
+
+<!-- RSI + MACD side by side -->
+<div class="two-col mb-4">
+  <div class="card">
+    <div class="card-header"><span class="card-title">RSI (14)</span></div>
+    <div class="card-body" style="padding:10px">
+      <div id="rsiChart" style="height:200px"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">MACD (12, 26, 9)</span></div>
+    <div class="card-body" style="padding:10px">
+      <div id="macdChart" style="height:200px"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+'use strict';
+
+const SYMBOL = '{{ symbol }}';
+let currentDays = 90;
+let candleChart, rsiChart, macdChart;
+
+function applySignal(sig) {
+  if (!sig) return;
+  const box   = document.getElementById('signalBox');
+  const title = document.getElementById('sigTitle');
+  const cls   = sig.signal.toLowerCase();
+  box.className   = `sig-box ${cls}`;
+  title.className = `sig-title ${cls}`;
+  title.textContent = sig.signal + ' Signal';
+  document.getElementById('sigReason').textContent = sig.reason || 'No reason available.';
+  document.getElementById('sigConf').textContent   = (sig.confidence ?? 0).toFixed(0) + '%';
+}
+
+function updateIndicatorRow(inds) {
+  if (!inds.length) return;
+  const latest = inds[inds.length - 1];
+  const f = v => v != null ? (+v).toFixed(2) : '—';
+  document.getElementById('ind-rsi').textContent   = f(latest.rsi);
+  document.getElementById('ind-macd').textContent  = f(latest.macd);
+  document.getElementById('ind-sma20').textContent = fmtPrice(latest.sma_20);
+  document.getElementById('ind-sma50').textContent = fmtPrice(latest.sma_50);
+  document.getElementById('ind-ema12').textContent = fmtPrice(latest.ema_12);
+  document.getElementById('ind-bbu').textContent   = fmtPrice(latest.bb_upper);
+  document.getElementById('ind-bbl').textContent   = fmtPrice(latest.bb_lower);
+
+  // Color RSI
+  const rsiEl = document.getElementById('ind-rsi');
+  const rsiV  = parseFloat(latest.rsi);
+  if (!isNaN(rsiV)) {
+    rsiEl.style.color = rsiV < 30 ? 'var(--accent-green)' : rsiV > 70 ? 'var(--accent-red)' : 'var(--accent-blue)';
+  }
+}
+
+async function loadData(days) {
+  try {
+    const data = await API.get(`/stock/${SYMBOL}?days=${days}`);
+    const { stock, prices, indicators, signal } = data;
+
+    // Header
+    document.getElementById('stockTitle').textContent = stock.name;
+    document.getElementById('stockMeta').textContent  =
+      `${SYMBOL.replace('.NS','').replace('.BO','')} · ${stock.exchange} · ${stock.sector ?? ''}`;
+
+    // Price
+    if (prices.length) {
+      const last = prices[prices.length - 1];
+      const prev = prices.length > 1 ? prices[prices.length - 2] : null;
+      const close = +last.close;
+      const pClose = prev ? +prev.close : close;
+      const chg    = close - pClose;
+      const chgPct = pClose ? chg / pClose * 100 : 0;
+      const pos    = chg >= 0;
+
+      document.getElementById('livePrice').textContent  = fmtPrice(close);
+      document.getElementById('liveChange').innerHTML   =
+        `<span class="${pos?'pos':'neg'}">${pos?'+':''}${chg.toFixed(2)} (${fmtPct(chgPct)})</span>`;
+      document.getElementById('ind-vol').textContent    = fmtVol(last.volume);
+    }
+
+    // Signal
+    applySignal(signal);
+
+    // Indicators row
+    updateIndicatorRow(indicators);
+
+    // Charts
+    if (candleChart)  { candleChart.dispose();  candleChart = null; }
+    if (rsiChart)     { rsiChart.dispose();     rsiChart    = null; }
+    if (macdChart)    { macdChart.dispose();    macdChart   = null; }
+
+    if (prices.length > 2) {
+      candleChart = buildCandlestickChart('candleChart', prices, indicators);
+      rsiChart    = buildRsiChart('rsiChart', indicators);
+      macdChart   = buildMacdChart('macdChart', indicators);
+    } else {
+      ['candleChart','rsiChart','macdChart'].forEach(id => {
+        document.getElementById(id).innerHTML =
+          '<div class="empty-state"><i class="bi bi-bar-chart-line"></i><p>Not enough data — trigger a refresh to fetch history</p></div>';
+      });
+    }
+  } catch(e) {
+    showToast('Failed to load stock data: ' + e.message, 'error');
+  }
+}
+
+// Period buttons
+document.querySelectorAll('#periodBtns .period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#periodBtns .period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentDays = +btn.dataset.days;
+    loadData(currentDays);
+  });
+});
+
+// Re-render charts on theme change
+document.getElementById('themeToggle')?.addEventListener('click', () => {
+  setTimeout(() => loadData(currentDays), 150);
+});
+
+loadData(currentDays);
+// Poll every 5 minutes
+setInterval(() => loadData(currentDays), 5 * 60 * 1000);
+</script>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Trading Signals{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Trading Signals</h1>
+  <p class="page-subtitle">Rules-based BUY / SELL / HOLD signals from technical indicators</p>
+</div>
+
+<!-- Summary Pills -->
+<div class="stats-grid mb-6">
+  <div class="stat-card"><div class="stat-label">Buy Signals</div><div class="stat-value green" id="kpiBuy">—</div></div>
+  <div class="stat-card"><div class="stat-label">Sell Signals</div><div class="stat-value red" id="kpiSell">—</div></div>
+  <div class="stat-card"><div class="stat-label">Hold Signals</div><div class="stat-value blue" id="kpiHold">—</div></div>
+</div>
+
+<!-- Filters -->
+<div class="toolbar mb-4">
+  <div id="sigTypeBtns" class="flex gap-2">
+    <button class="filter-btn active" data-sig="ALL">All Signals</button>
+    <button class="filter-btn" data-sig="BUY"><i class="bi bi-arrow-up-circle"></i> Buy</button>
+    <button class="filter-btn" data-sig="SELL"><i class="bi bi-arrow-down-circle"></i> Sell</button>
+    <button class="filter-btn" data-sig="HOLD"><i class="bi bi-dash-circle"></i> Hold</button>
+  </div>
+  <input type="text" class="search-input" id="sigSearch" placeholder="Search symbol or name…" />
+  <select class="search-input" id="sectorFilter" style="min-width:160px">
+    <option value="">All Sectors</option>
+  </select>
+</div>
+
+<!-- Signal Cards Grid -->
+<div class="signal-cards-grid" id="signalGrid">
+  <div style="grid-column:1/-1;padding:40px;text-align:center">
+    <div class="spinner" style="margin:auto"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+'use strict';
+
+let allSignals = [];
+let activeType = 'ALL';
+
+function renderSignalCard(s) {
+  const cls  = (s.signal || 'hold').toLowerCase();
+  const pos  = (s.change_pct ?? 0) >= 0;
+  return `
+  <div class="signal-card ${cls}" onclick="location.href='/stock/${s.symbol}'">
+    <div class="sc-top">
+      <div>
+        <div class="sc-symbol">${s.symbol.replace('.NS','').replace('.BO','')}</div>
+        <div class="sc-name">${s.name}</div>
+        ${s.sector ? `<div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">${s.sector}</div>` : ''}
+      </div>
+      <div>
+        <span class="badge badge-${cls}">${s.signal}</span>
+      </div>
+    </div>
+    <div class="sc-reason">${s.reason || 'Calculating…'}</div>
+    <div class="confidence-bar">
+      <div class="confidence-fill" style="width:${s.confidence ?? 0}%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+      <span style="font-size:10.5px;color:var(--text-muted)">Confidence: ${(s.confidence ?? 0).toFixed(0)}%</span>
+      <span style="font-size:10.5px;color:var(--text-muted)">${fmtDate(s.datetime)}</span>
+    </div>
+  </div>`;
+}
+
+function renderGrid(signals) {
+  const q = document.getElementById('sigSearch').value.trim().toLowerCase();
+  const sector = document.getElementById('sectorFilter').value;
+
+  let filtered = signals;
+  if (activeType !== 'ALL') filtered = filtered.filter(s => s.signal === activeType);
+  if (q) filtered = filtered.filter(s => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
+  if (sector) filtered = filtered.filter(s => s.sector === sector);
+
+  const grid = document.getElementById('signalGrid');
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><i class="bi bi-lightning"></i><p>No signals match your filter</p></div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(renderSignalCard).join('');
+}
+
+async function loadSignals() {
+  try {
+    const data = await API.get('/signals');
+    allSignals = data;
+
+    // Populate sector filter
+    const sectors = [...new Set(data.map(s => s.sector).filter(Boolean))].sort();
+    const sel = document.getElementById('sectorFilter');
+    sectors.forEach(sec => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = sec;
+      sel.appendChild(opt);
+    });
+
+    // KPIs
+    document.getElementById('kpiBuy').textContent  = data.filter(s=>s.signal==='BUY').length;
+    document.getElementById('kpiSell').textContent = data.filter(s=>s.signal==='SELL').length;
+    document.getElementById('kpiHold').textContent = data.filter(s=>s.signal==='HOLD').length;
+
+    renderGrid(data);
+  } catch(e) {
+    document.getElementById('signalGrid').innerHTML =
+      `<div class="empty-state" style="grid-column:1/-1"><i class="bi bi-database-x"></i><p>No signal data — seed and refresh first</p></div>`;
+  }
+}
+
+document.querySelectorAll('#sigTypeBtns .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#sigTypeBtns .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeType = btn.dataset.sig;
+    renderGrid(allSignals);
+  });
+});
+document.getElementById('sigSearch').addEventListener('input', () => renderGrid(allSignals));
+document.getElementById('sectorFilter').addEventListener('change', () => renderGrid(allSignals));
+
+loadSignals();
+setInterval(loadSignals, 5 * 60 * 1000);
+</script>
+{% endblock %}

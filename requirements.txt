@@ -1,0 +1,15 @@
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+Flask-CORS
+APScheduler
+yfinance
+pandas
+numpy
+ta
+SQLAlchemy
+PyMySQL
+python-dotenv
+gunicorn
+requests
+cryptography

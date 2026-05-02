@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Market Trends{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Market Trends</h1>
+  <p class="page-subtitle">Sector breakdown, signal distribution, and top-mover analysis</p>
+</div>
+
+<div class="two-col mb-6">
+  <!-- Signal Distribution Pie -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Signal Distribution</span></div>
+    <div class="card-body" style="padding:10px">
+      <div id="signalPieChart" style="height:280px"></div>
+    </div>
+  </div>
+  <!-- Sector Heatmap -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Stocks by Sector</span></div>
+    <div class="card-body" id="sectorBody" style="padding:18px 20px">
+      <div class="spinner" style="margin:auto;display:block"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Gainer / Loser bar chart -->
+<div class="card mb-6">
+  <div class="card-header"><span class="card-title">Top 10 Movers Today</span></div>
+  <div class="card-body" style="padding:10px">
+    <div id="moversBarChart" style="height:320px"></div>
+  </div>
+</div>
+
+<!-- Volume leaders -->
+<div class="card mb-6">
+  <div class="card-header"><span class="card-title">Volume Leaders</span></div>
+  <div class="card-body" style="padding:10px">
+    <div id="volBarChart" style="height:280px"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+'use strict';
+
+async function loadTrends() {
+  try {
+    const [stocks, movers, summary] = await Promise.all([
+      API.get('/stocks'),
+      API.get('/top-movers'),
+      API.get('/market-summary'),
+    ]);
+
+    buildSignalPie(summary);
+    buildSectorBreakdown(stocks);
+    buildMoversBar(movers);
+    buildVolBar(stocks);
+  } catch(e) {
+    showToast('Error loading trends: ' + e.message, 'error');
+  }
+}
+
+function buildSignalPie(summary) {
+  const el = document.getElementById('signalPieChart');
+  if (!el) return;
+  const chart = echarts.init(el);
+  const t = getEchartsTheme();
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: t.bg, borderColor: t.border,
+      textStyle: { color: t.textBright },
+    },
+    legend: {
+      bottom: 0, textStyle: { color: t.textColor },
+    },
+    series: [{
+      type: 'pie', radius: ['45%', '70%'],
+      center: ['50%', '45%'],
+      label: { color: t.textColor },
+      data: [
+        { name: 'Buy',  value: summary.buy_signals  ?? 0, itemStyle: { color: t.green  } },
+        { name: 'Sell', value: summary.sell_signals ?? 0, itemStyle: { color: t.red    } },
+        { name: 'Hold', value: summary.hold_signals ?? 0, itemStyle: { color: t.blue   } },
+      ],
+    }],
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+function buildSectorBreakdown(stocks) {
+  const counts = {};
+  stocks.forEach(s => { if (s.sector) counts[s.sector] = (counts[s.sector] || 0) + 1; });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  const max    = sorted[0]?.[1] || 1;
+
+  document.getElementById('sectorBody').innerHTML = sorted.map(([sec, cnt]) => `
+    <div class="sector-bar">
+      <div class="sector-name" title="${sec}">${sec}</div>
+      <div class="sector-track"><div class="sector-fill" style="width:${(cnt/max*100).toFixed(0)}%"></div></div>
+      <div class="sector-count">${cnt}</div>
+    </div>
+  `).join('');
+}
+
+function buildMoversBar(data) {
+  const el = document.getElementById('moversBarChart');
+  if (!el) return;
+  const chart = echarts.init(el);
+  const t = getEchartsTheme();
+
+  const all = [...data.gainers, ...data.losers].sort((a,b) => b.change_pct - a.change_pct);
+  const names = all.map(s => s.symbol.replace('.NS','').replace('.BO',''));
+  const vals  = all.map(s => s.change_pct ?? 0);
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: t.bg, borderColor: t.border,
+      textStyle: { color: t.textBright },
+      formatter: p => `${p[0].name}: ${p[0].value.toFixed(2)}%`,
+    },
+    grid: { left: 60, right: 16, top: 20, bottom: 40 },
+    xAxis: {
+      type: 'category', data: names,
+      axisLabel: { color: t.textColor, fontSize: 11, rotate: 30 },
+      axisLine: { lineStyle: { color: t.border } },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: t.textColor, fontSize: 11, formatter: v => v + '%' },
+      splitLine: { lineStyle: { color: t.border, type: 'dashed' } },
+    },
+    series: [{
+      type: 'bar',
+      data: vals.map(v => ({
+        value: +v.toFixed(2),
+        itemStyle: { color: v >= 0 ? t.green : t.red, borderRadius: [3, 3, 0, 0] }
+      })),
+      label: { show: true, position: v => v.data.value >= 0 ? 'top' : 'bottom',
+               formatter: p => p.value.toFixed(1) + '%',
+               color: t.textColor, fontSize: 10 },
+    }],
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+function buildVolBar(stocks) {
+  const el = document.getElementById('volBarChart');
+  if (!el) return;
+  const chart = echarts.init(el);
+  const t = getEchartsTheme();
+
+  const sorted = [...stocks]
+    .filter(s => s.volume)
+    .sort((a,b) => b.volume - a.volume)
+    .slice(0, 10);
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: t.bg, borderColor: t.border,
+      textStyle: { color: t.textBright },
+      formatter: p => `${p[0].name}: ${fmtVol(p[0].value)}`,
+    },
+    grid: { left: 80, right: 16, top: 20, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: sorted.map(s => s.symbol.replace('.NS','').replace('.BO','')),
+      axisLabel: { color: t.textColor, fontSize: 11, rotate: 30 },
+      axisLine: { lineStyle: { color: t.border } },
+    },
+    yAxis: {
+      axisLabel: { color: t.textColor, fontSize: 11, formatter: v => fmtVol(v) },
+      splitLine: { lineStyle: { color: t.border, type: 'dashed' } },
+    },
+    series: [{
+      type: 'bar',
+      data: sorted.map((s,i) => ({
+        value: s.volume,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0,0,0,1,[
+            { offset: 0, color: t.blue },
+            { offset: 1, color: t.purple },
+          ]),
+          borderRadius: [3,3,0,0],
+        }
+      })),
+    }],
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+loadTrends();
+setInterval(loadTrends, 5 * 60 * 1000);
+</script>
+{% endblock %}
