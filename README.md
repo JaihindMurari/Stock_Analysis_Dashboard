@@ -3,7 +3,17 @@
 A production-ready Flask web application that fetches, stores, analyzes, and visualizes stock data for the **Top 50 Indian equities** listed on NSE and BSE.
 
 ---
-
+<h1>Home</h1>
+<img width="1899" height="865" alt="Screenshot 2026-05-02 105952" src="https://github.com/user-attachments/assets/965b406f-c7a1-42ae-a0c7-1f33b3351f4f" />
+<br>
+<img width="1899" height="866" alt="Screenshot 2026-05-02 105914" src="https://github.com/user-attachments/assets/d0493d34-1977-4330-b31c-c017f85a7ffa" />
+<br>
+<h1>Signals</h1>
+<img width="1897" height="843" alt="Screenshot 2026-05-02 113613" src="https://github.com/user-attachments/assets/c885dc6f-ed5f-4879-8d42-a30989ea10e8" />
+<br>
+<h1>Market Trends</h1>
+<img width="1898" height="872" alt="Screenshot 2026-05-02 113639" src="https://github.com/user-attachments/assets/f668d8ae-00db-4a54-b730-3ddb63fa49e9" />
+<br>
 ## 🗂️ Project Structure
 
 ```
